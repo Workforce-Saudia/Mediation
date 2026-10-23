@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { supabase, usernameToEmail } from './supabase'
 
 const AuthContext = createContext(null)
@@ -9,15 +9,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(Boolean(supabase))
   const [profileLoading, setProfileLoading] = useState(false)
 
-  const loadProfile = useCallback(async (user) => {
+  const profileUserId = useRef(null)
+
+  /**
+   * quiet = refresh in the background without showing a loading screen.
+   * Supabase fires SIGNED_IN again whenever the browser tab regains focus; showing a
+   * spinner then would unmount the page and wipe any half-filled form.
+   */
+  const loadProfile = useCallback(async (user, { quiet = false } = {}) => {
     if (!user) {
+      profileUserId.current = null
       setProfile(null)
       return
     }
-    setProfileLoading(true)
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
-    setProfile(data || null)
-    setProfileLoading(false)
+    if (!quiet) setProfileLoading(true)
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+    // a network hiccup during a background refresh must not log the user out of the UI
+    if (!error || !quiet) {
+      profileUserId.current = data ? user.id : null
+      setProfile((prev) => (prev && data && JSON.stringify(prev) === JSON.stringify(data) ? prev : data || null))
+    }
+    if (!quiet) setProfileLoading(false)
   }, [])
 
   useEffect(() => {
@@ -31,9 +43,12 @@ export function AuthProvider({ children }) {
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s)
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+      if (event === 'SIGNED_OUT') {
+        setTimeout(() => loadProfile(null), 0)
+      } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        const sameUser = s?.user?.id && s.user.id === profileUserId.current
         // defer: calling supabase inside this callback can dead-lock
-        setTimeout(() => loadProfile(s?.user), 0)
+        setTimeout(() => loadProfile(s?.user, { quiet: sameUser }), 0)
       }
     })
     return () => {
