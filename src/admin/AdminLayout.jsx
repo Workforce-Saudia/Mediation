@@ -33,7 +33,8 @@ export default function AdminLayout() {
   }, [t, c])
 
   if (!isConfigured) return <SetupNotice />
-  if (loading || (session && profileLoading)) return <Spinner full />
+  // only block the screen on the first load — never unmount an open page (it would wipe unsaved forms)
+  if (loading || (session && profileLoading && !profile)) return <Spinner full />
   if (!session) return <Navigate to="/admin/login" replace state={{ from: loc.pathname }} />
   if (!profile || !profile.active) {
     return (
