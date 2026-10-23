@@ -14,6 +14,17 @@ export function usernameToEmail(input) {
   return v.includes('@') ? v : `${v}@${USERNAME_DOMAIN}`
 }
 
+/** Fetch every row of a query (Supabase returns max 1000 rows per request) */
+export async function fetchAll(makeQuery, pageSize = 1000) {
+  const out = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await makeQuery().range(from, from + pageSize - 1)
+    if (error) throw error
+    out.push(...(data || []))
+    if (!data || data.length < pageSize) return out
+  }
+}
+
 /** Upload a file to the public "media" bucket and return its public URL. */
 export async function uploadFile(file, folder = 'misc', accept) {
   if (!supabase) throw new Error('Supabase is not configured')

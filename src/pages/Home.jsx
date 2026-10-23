@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import { useContent } from '../lib/content'
 import { useLang } from '../lib/i18n'
 import { track } from '../lib/analytics'
@@ -21,6 +21,25 @@ function SectionHead({ title, sub }) {
 export default function Home() {
   const { c } = useContent()
   const { t, pick } = useLang()
+  const { forms = [] } = useOutletContext() || {}
+  // extra forms placed on the home page from the dashboard (Forms → placement)
+  const formsAt = (pos) =>
+    forms
+      .filter((f) => f.home_position === pos)
+      .map((f) => (
+        <section key={f.slug} id={`form-${f.slug}`} className="section section-tint">
+          <div className="container narrow">
+            <div className="section-head">
+              <h2>{pick(f, 'name')}</h2>
+              {pick(f, 'description') && <p>{pick(f, 'description')}</p>}
+              <span className="section-line" />
+            </div>
+            <div className="card form-card">
+              <DynamicForm slug={f.slug} />
+            </div>
+          </div>
+        </section>
+      ))
   const why = useFeatures('why')
   const steps = useFeatures('service')
   usePageTitle(c('seo_title'))
@@ -53,6 +72,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {formsAt('after_hero')}
 
       {/* ---------- 1. ABOUT ---------- */}
       <section id="about" className="section">
@@ -77,6 +97,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {formsAt('after_about')}
 
       {/* ---------- 2. WHY US ---------- */}
       <section id="why" className="section section-tint">
@@ -99,6 +120,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {formsAt('after_why')}
 
       {/* ---------- 3. MEDIATION SERVICE ---------- */}
       <section id="mediation" className="section">
@@ -129,6 +151,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {formsAt('after_service')}
 
       {/* ---------- 4. FAQ TEASER ---------- */}
       <section id="faq" className="section section-tint">
@@ -146,6 +169,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {formsAt('after_faq')}
 
       {/* ---------- 5. CONTACT ---------- */}
       <section id="contact" className="section">
@@ -164,6 +188,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {formsAt('after_contact')}
 
       <WhatsAppButton />
     </>

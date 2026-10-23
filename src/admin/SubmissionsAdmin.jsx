@@ -91,20 +91,22 @@ export default function SubmissionsAdmin() {
     return rows.filter((r) => JSON.stringify(r.data).toLowerCase().includes(needle))
   }, [rows, q])
 
-  const setRowStatus = async (r, s) => {
-    const { error } = await supabase.from('submissions').update({ status: s }).eq('id', r.id)
-    if (error) return toast(error.message, 'error')
-    setRows((all) => all.map((x) => (x.id === r.id ? { ...x, status: s } : x)))
-    if (view?.id === r.id) setView((v) => ({ ...v, status: s }))
-    return undefined
+  // the database stamps who/when (trigger), so read the row back after saving
+  const patchRow = async (id, patch) => {
+    const { data, error } = await supabase.from('submissions').update(patch).eq('id', id).select('*').single()
+    if (error) {
+      toast(error.message, 'error')
+      return null
+    }
+    setRows((all) => all.map((x) => (x.id === id ? data : x)))
+    setView((v) => (v?.id === id ? { ...data, notes: patch.notes !== undefined ? data.notes : v.notes } : v))
+    return data
   }
 
+  const setRowStatus = (r, s) => patchRow(r.id, { status: s })
+
   const saveNotes = async () => {
-    const { error } = await supabase.from('submissions').update({ notes: view.notes }).eq('id', view.id)
-    if (error) return toast(error.message, 'error')
-    setRows((all) => all.map((x) => (x.id === view.id ? { ...x, notes: view.notes } : x)))
-    toast(t('saved'))
-    return undefined
+    if (await patchRow(view.id, { notes: view.notes || null })) toast(t('saved'))
   }
 
   const del = async (r) => {
@@ -118,12 +120,15 @@ export default function SubmissionsAdmin() {
 
   const exportExcel = async () => {
     const XLSX = await import('xlsx')
-    const header = [t('date'), t('status'), ...columns.map((c) => c.label), t('notes'), 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid / fbclid', t('page_url')]
+    const header = [t('date'), t('status'), t('status_changed_by'), t('status_changed_at'), ...columns.map((c) => c.label), t('notes'), t('notes_updated_by'), 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid / fbclid', t('page_url')]
     const data = filtered.map((r) => [
       fmtDate(r.created_at, lang),
       t(`status_${r.status}`),
+      r.status_updated_by_name || '',
+      r.status_updated_at ? fmtDate(r.status_updated_at, lang) : '',
       ...columns.map((c) => display(c, r.data?.[c.key])),
       r.notes || '',
+      r.notes_updated_by_name ? `${r.notes_updated_by_name} — ${fmtDate(r.notes_updated_at, lang)}` : '',
       r.utm?.utm_source || '',
       r.utm?.utm_medium || '',
       r.utm?.utm_campaign || '',
@@ -186,6 +191,7 @@ export default function SubmissionsAdmin() {
                   {listCols.map((c) => <th key={c.key}>{c.label}</th>)}
                   <th>{t('source')}</th>
                   <th>{t('status')}</th>
+                  <th>{t('notes')}</th>
                   <th />
                 </tr>
               </thead>
@@ -199,6 +205,14 @@ export default function SubmissionsAdmin() {
                       <select className={`input sm status-select s-${r.status}`} value={r.status} onChange={(e) => setRowStatus(r, e.target.value)}>
                         {STATUSES.map((s) => <option key={s} value={s}>{t(`status_${s}`)}</option>)}
                       </select>
+                      {r.status_updated_at && (
+                        <div className="muted tiny nowrap" title={fmtDate(r.status_updated_at, lang)}>
+                          {r.status_updated_by_name || '—'} · {fmtDate(r.status_updated_at, lang)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="notes-cell" title={r.notes || ''}>
+                      {r.notes ? <span className="clamp-2">{r.notes}</span> : <span className="muted">—</span>}
                     </td>
                     <td><button type="button" className="btn btn-sm btn-ghost" onClick={() => setView({ ...r })}><Icon name="eye" size={16} /></button></td>
                   </tr>
@@ -237,10 +251,16 @@ export default function SubmissionsAdmin() {
             <select className="input" value={view.status} onChange={(e) => setRowStatus(view, e.target.value)}>
               {STATUSES.map((s) => <option key={s} value={s}>{t(`status_${s}`)}</option>)}
             </select>
+            {view.status_updated_at && (
+              <div className="hint">{t('last_status_change')}: <b>{view.status_updated_by_name || '—'}</b> · {fmtDate(view.status_updated_at, lang)}</div>
+            )}
           </div>
           <div className="field">
             <label className="lbl">{t('notes')}</label>
             <textarea className="input" rows={3} value={view.notes || ''} onChange={(e) => setView((v) => ({ ...v, notes: e.target.value }))} />
+            {view.notes_updated_at && (
+              <div className="hint">{t('last_notes_change')}: <b>{view.notes_updated_by_name || '—'}</b> · {fmtDate(view.notes_updated_at, lang)}</div>
+            )}
             <div className="form-actions"><button type="button" className="btn btn-sm btn-primary" onClick={saveNotes}>{t('save_notes')}</button></div>
           </div>
           <StatusBadge status={view.status} />

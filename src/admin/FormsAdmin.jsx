@@ -9,6 +9,29 @@ import { BiField, Modal, PageHeader, Toggle, moveItem } from './ui'
 const TYPES = ['text', 'textarea', 'tel', 'email', 'number', 'date', 'select', 'radio', 'checkbox']
 const BLANK_FIELD = { name: '', type: 'text', label_ar: '', label_en: '', placeholder_ar: '', placeholder_en: '', options: [], required: false, pattern: '', error_ar: '', error_en: '', active: true, system: false }
 
+export const HOME_POSITIONS = ['none', 'after_hero', 'after_about', 'after_why', 'after_service', 'after_faq', 'after_contact']
+
+/** Where a form appears on the website (header link / footer link / home page section) */
+function PlacementFields({ value, set }) {
+  const { t } = useLang()
+  return (
+    <div className="placement">
+      <label className="lbl">{t('placement')}</label>
+      <p className="hint">{t('placement_hint')}</p>
+      <div className="row-gap">
+        <Toggle checked={value.show_in_header} onChange={(v) => set({ show_in_header: v })} label={t('place_header')} />
+        <Toggle checked={value.show_in_footer} onChange={(v) => set({ show_in_footer: v })} label={t('place_footer')} />
+      </div>
+      <div className="field mt">
+        <label className="lbl">{t('place_home')}</label>
+        <select className="input" value={value.home_position || 'none'} onChange={(e) => set({ home_position: e.target.value })}>
+          {HOME_POSITIONS.map((p) => <option key={p} value={p}>{t(`pos_${p}`)}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+}
+
 export function formPublicUrl(slug) {
   if (slug === 'contact') return '/contact'
   if (slug === 'booking') return '/workers → /book/<worker-id>'
@@ -91,10 +114,31 @@ export default function FormsAdmin() {
     loadFields()
   }
 
+  const deleteForm = async () => {
+    const { count } = await supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('form_slug', form.slug)
+    const msg = count ? t('confirm_delete_form_entries', { n: count }) : t('confirm_delete_form')
+    if (!window.confirm(msg)) return
+    const { error } = await supabase.from('forms').delete().eq('slug', form.slug)
+    if (error) return toast(/system_form/.test(error.message) ? t('system_form_locked') : error.message, 'error')
+    toast(t('deleted'))
+    setForm(null)
+    setFields([])
+    setSlug('')
+    loadForms()
+    return undefined
+  }
+
   const createForm = async () => {
     const s = String(newForm.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
     if (!s || !newForm.name_ar || !newForm.name_en) return toast(t('fill_required'), 'error')
-    const { error } = await supabase.from('forms').insert({ slug: s, name_ar: newForm.name_ar, name_en: newForm.name_en })
+    const { error } = await supabase.from('forms').insert({
+      slug: s,
+      name_ar: newForm.name_ar,
+      name_en: newForm.name_en,
+      show_in_header: newForm.show_in_header,
+      show_in_footer: newForm.show_in_footer,
+      home_position: newForm.home_position,
+    })
     if (error) return toast(error.code === '23505' ? t('err_duplicate_slug') : error.message, 'error')
     setNewForm(null)
     setSlug(s)
@@ -107,7 +151,7 @@ export default function FormsAdmin() {
   return (
     <>
       <PageHeader title={t('forms')} sub={t('forms_sub')}>
-        <button type="button" className="btn btn-outline" onClick={() => setNewForm({ slug: '', name_ar: '', name_en: '' })}><Icon name="plus" size={18} />{t('new_form')}</button>
+        <button type="button" className="btn btn-outline" onClick={() => setNewForm({ slug: '', name_ar: '', name_en: '', show_in_header: false, show_in_footer: true, home_position: 'none' })}><Icon name="plus" size={18} />{t('new_form')}</button>
       </PageHeader>
 
       <div className="seg">
@@ -124,12 +168,24 @@ export default function FormsAdmin() {
               <span className="muted small" dir="ltr">{t('public_url')}: {formPublicUrl(form.slug)}</span>
             </div>
             <BiField label={t('form_name')} obj={form} base="name" set={(p) => setForm((s) => ({ ...s, ...p }))} />
+            <BiField label={t('form_description')} obj={form} base="description" set={(p) => setForm((s) => ({ ...s, ...p }))} textarea rows={2} hint={t('form_description_hint')} />
             <BiField label={t('submit_text')} obj={form} base="submit" set={(p) => setForm((s) => ({ ...s, ...p }))} />
             <div className="row-gap">
               <Toggle checked={form.require_terms} onChange={(v) => setForm((s) => ({ ...s, require_terms: v }))} label={t('require_terms')} />
               <Toggle checked={form.active} onChange={(v) => setForm((s) => ({ ...s, active: v }))} label={t('form_active')} />
             </div>
-            <div className="form-actions"><button type="button" className="btn btn-primary" onClick={saveForm}>{t('save')}</button></div>
+            {form.system ? (
+              <p className="hint mt">{t('system_form_placement')}</p>
+            ) : (
+              <PlacementFields value={form} set={(p) => setForm((s) => ({ ...s, ...p }))} />
+            )}
+            <div className="form-actions">
+              <button type="button" className="btn btn-primary" onClick={saveForm}>{t('save')}</button>
+              <span className="flex1" />
+              {!form.system && (
+                <button type="button" className="btn btn-ghost danger" onClick={deleteForm}><Icon name="trash" size={16} />{t('delete_form')}</button>
+              )}
+            </div>
           </div>
 
           <div className="card">
@@ -222,6 +278,8 @@ export default function FormsAdmin() {
             <div className="hint">{t('new_form_hint')}</div>
           </div>
           <BiField label={t('form_name')} obj={newForm} base="name" set={(p) => setNewForm((s) => ({ ...s, ...p }))} />
+          <PlacementFields value={newForm} set={(p) => setNewForm((s) => ({ ...s, ...p }))} />
+          <p className="hint">{t('new_form_next')}</p>
         </Modal>
       )}
     </>

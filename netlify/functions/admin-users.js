@@ -50,20 +50,40 @@ export default async (req) => {
         const password = String(body.password || '')
         const role = body.role === 'admin' ? 'admin' : 'agent'
         const fullName = String(body.full_name || '').trim().slice(0, 100)
+        const employeeId = String(body.employee_id || '').trim().slice(0, 40) || null
         if (!USERNAME_RE.test(username)) return json(400, { error: 'invalid_username' })
         if (password.length < 8) return json(400, { error: 'weak_password' })
         const { data: exists } = await admin.from('profiles').select('id').eq('username', username).maybeSingle()
         if (exists) return json(409, { error: 'username_taken' })
+        if (employeeId) {
+          const { data: idTaken } = await admin.from('profiles').select('id').eq('employee_id', employeeId).maybeSingle()
+          if (idTaken) return json(409, { error: 'employee_id_taken' })
+        }
         const { data, error } = await admin.auth.admin.createUser({
           email: `${username}@${domain}`,
           password,
           email_confirm: true,
-          app_metadata: { created_by_admin: true, role, username, full_name: fullName },
+          app_metadata: { created_by_admin: true, role, username, full_name: fullName, employee_id: employeeId },
         })
         if (error) throw error
         // make sure the profile matches (trigger creates it)
-        await admin.from('profiles').update({ role, full_name: fullName || null, active: true, username }).eq('id', data.user.id)
+        await admin
+          .from('profiles')
+          .update({ role, full_name: fullName || null, employee_id: employeeId, active: true, username })
+          .eq('id', data.user.id)
         return json(200, { ok: true, id: data.user.id })
+      }
+
+      case 'update_profile': {
+        const fullName = String(body.full_name || '').trim().slice(0, 100) || null
+        const employeeId = String(body.employee_id || '').trim().slice(0, 40) || null
+        if (employeeId) {
+          const { data: idTaken } = await admin.from('profiles').select('id').eq('employee_id', employeeId).neq('id', body.id).maybeSingle()
+          if (idTaken) return json(409, { error: 'employee_id_taken' })
+        }
+        const { error } = await admin.from('profiles').update({ full_name: fullName, employee_id: employeeId }).eq('id', body.id)
+        if (error) throw error
+        return json(200, { ok: true })
       }
 
       case 'set_password': {

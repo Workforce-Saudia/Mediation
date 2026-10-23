@@ -56,7 +56,10 @@ export function FormPage() {
   return (
     <div>
       <section className="page-hero">
-        <div className="container narrow"><h1>{form ? pick(form, 'name') : ' '}</h1></div>
+        <div className="container narrow">
+          <h1>{form ? pick(form, 'name') : ' '}</h1>
+          {form && pick(form, 'description') && <Markdown text={pick(form, 'description')} className="page-hero-text" />}
+        </div>
       </section>
       <div className="container narrow">
         <div className="card form-card"><DynamicForm slug={slug} /></div>

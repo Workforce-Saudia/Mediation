@@ -14,6 +14,7 @@ import { Contact, FormPage, NotFound, Terms, ThankYou } from './pages/SimplePage
 
 // Dashboard is loaded only when needed, so the public pages stay fast for ad traffic
 const AdminLayout = lazy(() => import('./admin/AdminLayout'))
+const AdminOnly = lazy(() => import('./admin/AdminLayout').then((m) => ({ default: m.AdminOnly })))
 const Login = lazy(() => import('./admin/Login'))
 const Dashboard = lazy(() => import('./admin/Dashboard'))
 const WorkersAdmin = lazy(() => import('./admin/WorkersAdmin'))
@@ -57,14 +58,14 @@ export default function App() {
                 <Route path="workers/new" element={<WorkerEdit />} />
                 <Route path="workers/:id" element={<WorkerEdit />} />
                 <Route path="catalog" element={<CatalogAdmin />} />
-                <Route path="content" element={<ContentAdmin />} />
-                <Route path="features" element={<FeaturesAdmin />} />
-                <Route path="faq" element={<FaqAdmin />} />
-                <Route path="forms" element={<FormsAdmin />} />
+                <Route path="content" element={<AdminOnly><ContentAdmin /></AdminOnly>} />
+                <Route path="features" element={<AdminOnly><FeaturesAdmin /></AdminOnly>} />
+                <Route path="faq" element={<AdminOnly><FaqAdmin /></AdminOnly>} />
+                <Route path="forms" element={<AdminOnly><FormsAdmin /></AdminOnly>} />
                 <Route path="submissions" element={<SubmissionsAdmin />} />
                 <Route path="submissions/:slug" element={<SubmissionsAdmin />} />
-                <Route path="webhooks" element={<WebhooksAdmin />} />
-                <Route path="users" element={<UsersAdmin />} />
+                <Route path="webhooks" element={<AdminOnly><WebhooksAdmin /></AdminOnly>} />
+                <Route path="users" element={<AdminOnly><UsersAdmin /></AdminOnly>} />
                 <Route path="account" element={<Account />} />
               </Route>
             </Routes>

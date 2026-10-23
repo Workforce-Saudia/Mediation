@@ -8,6 +8,7 @@ import { Empty, Modal, PageHeader } from './ui'
 
 const ERR_KEYS = {
   username_taken: 'err_username_taken',
+  employee_id_taken: 'err_employee_id_taken',
   invalid_username: 'err_username',
   weak_password: 'err_password',
   cannot_deactivate_self: 'err_self',
@@ -53,6 +54,7 @@ export default function UsersAdmin() {
   const [loadErr, setLoadErr] = useState('')
   const [create, setCreate] = useState(null)
   const [pw, setPw] = useState(null)
+  const [edit, setEdit] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const errMsg = (e) => (ERR_KEYS[e.message] ? t(ERR_KEYS[e.message]) : e.message)
@@ -96,11 +98,14 @@ export default function UsersAdmin() {
   const submitPw = async () => {
     if (await run({ action: 'set_password', id: pw.id, password: pw.password }, t('password_changed'))) setPw(null)
   }
+  const submitEdit = async () => {
+    if (await run({ action: 'update_profile', id: edit.id, full_name: edit.full_name, employee_id: edit.employee_id })) setEdit(null)
+  }
 
   return (
     <>
       <PageHeader title={t('users')} sub={t('users_sub')}>
-        <button type="button" className="btn btn-primary" onClick={() => setCreate({ username: '', full_name: '', password: '', role: 'agent' })}><Icon name="plus" size={18} />{t('add_user')}</button>
+        <button type="button" className="btn btn-primary" onClick={() => setCreate({ username: '', full_name: '', employee_id: '', password: '', role: 'agent' })}><Icon name="plus" size={18} />{t('add_user')}</button>
       </PageHeader>
 
       {loadErr && <div className="notice notice-error">{t('users_load_error')} ({errMsg({ message: loadErr })})</div>}
@@ -109,13 +114,14 @@ export default function UsersAdmin() {
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th>{t('username')}</th><th>{t('full_name')}</th><th>{t('role')}</th><th>{t('status')}</th><th>{t('last_login')}</th><th /></tr>
+              <tr><th>{t('employee_id')}</th><th>{t('username')}</th><th>{t('full_name')}</th><th>{t('role')}</th><th>{t('status')}</th><th>{t('last_login')}</th><th /></tr>
             </thead>
             <tbody>
               {users.map((u) => {
                 const self = u.id === profile.id
                 return (
                   <tr key={u.id} className={u.active ? '' : 'inactive'}>
+                    <td dir="ltr" className="mono">{u.employee_id || '—'}</td>
                     <td dir="ltr" className="mono">{u.username}{self && <span className="tag sm">{t('you')}</span>}</td>
                     <td>{u.full_name || '—'}</td>
                     <td>
@@ -127,6 +133,7 @@ export default function UsersAdmin() {
                     <td><span className={`badge ${u.active ? 'badge-published' : 'badge-retired'}`}>{u.active ? t('active') : t('inactive')}</span></td>
                     <td className="small nowrap">{fmtDate(u.last_sign_in_at, lang)}</td>
                     <td className="nowrap actions">
+                      <button type="button" className="btn btn-sm btn-ghost" disabled={busy} title={t('edit')} onClick={() => setEdit({ id: u.id, username: u.username, full_name: u.full_name || '', employee_id: u.employee_id || '' })}><Icon name="edit" size={14} /></button>
                       <button type="button" className="btn btn-sm btn-outline" disabled={busy} onClick={() => setPw({ id: u.id, username: u.username, password: '' })}><Icon name="lock" size={14} />{t('change_password')}</button>
                       {!self && (u.active ? (
                         <button type="button" className="btn btn-sm btn-warn" disabled={busy} onClick={() => window.confirm(t('confirm_deactivate')) && run({ action: 'set_active', id: u.id, active: false })}>{t('deactivate')}</button>
@@ -158,6 +165,11 @@ export default function UsersAdmin() {
             <label className="lbl">{t('full_name')}</label>
             <input className="input" value={create.full_name} onChange={(e) => setCreate((s) => ({ ...s, full_name: e.target.value }))} />
           </div>
+          <div className="field">
+            <label className="lbl">{t('employee_id')}</label>
+            <input className="input mono" dir="ltr" value={create.employee_id} onChange={(e) => setCreate((s) => ({ ...s, employee_id: e.target.value }))} />
+            <div className="hint">{t('employee_id_hint')}</div>
+          </div>
           <PasswordInput label={t('password')} value={create.password} onChange={(v) => setCreate((s) => ({ ...s, password: v }))} />
           <div className="field">
             <label className="lbl">{t('role')}</label>
@@ -165,6 +177,23 @@ export default function UsersAdmin() {
               <option value="agent">{t('role_agent')}</option>
               <option value="admin">{t('role_admin')}</option>
             </select>
+          </div>
+        </Modal>
+      )}
+
+      {edit && (
+        <Modal
+          title={`${t('edit')} — ${edit.username}`}
+          onClose={() => setEdit(null)}
+          footer={<><button type="button" className="btn btn-ghost" onClick={() => setEdit(null)}>{t('cancel')}</button><button type="button" className="btn btn-primary" disabled={busy} onClick={submitEdit}>{t('save')}</button></>}
+        >
+          <div className="field">
+            <label className="lbl">{t('full_name')}</label>
+            <input className="input" value={edit.full_name} onChange={(e) => setEdit((s) => ({ ...s, full_name: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label className="lbl">{t('employee_id')}</label>
+            <input className="input mono" dir="ltr" value={edit.employee_id} onChange={(e) => setEdit((s) => ({ ...s, employee_id: e.target.value }))} />
           </div>
         </Modal>
       )}

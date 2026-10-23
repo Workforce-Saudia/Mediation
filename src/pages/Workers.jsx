@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { fetchAll, supabase } from '../lib/supabase'
 import { useLang } from '../lib/i18n'
 import { useContent } from '../lib/content'
 import { track } from '../lib/analytics'
@@ -74,13 +74,15 @@ export default function Workers() {
       const [p, co, w] = await Promise.all([
         supabase.from('professions').select('*').eq('active', true).order('sort'),
         supabase.from('countries').select('*').eq('active', true).order('sort'),
-        supabase
-          .from('workers')
-          .select('id,worker_code,name,age,photo_url,cv_url,country_id,published_at,worker_professions(profession_id,cv_url)')
-          .eq('status', 'published')
-          .order('published_at', { ascending: false }),
+        fetchAll(() =>
+          supabase
+            .from('workers')
+            .select('id,worker_code,name,age,photo_url,cv_url,country_id,published_at,worker_professions(profession_id,cv_url)')
+            .eq('status', 'published')
+            .order('published_at', { ascending: false }),
+        ).catch(() => []),
       ])
-      setSt({ loading: false, professions: p.data || [], countries: co.data || [], workers: w.data || [] })
+      setSt({ loading: false, professions: p.data || [], countries: co.data || [], workers: w })
     })()
   }, [])
 

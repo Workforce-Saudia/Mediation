@@ -20,6 +20,14 @@ export function SetupNotice() {
   )
 }
 
+/** Wrap admin-only pages: agents see a "no access" message instead */
+export function AdminOnly({ children }) {
+  const { isAdmin } = useAuth()
+  const { t } = useLang()
+  if (!isAdmin) return <div className="a-empty"><Icon name="lock" size={28} /><p>{t('no_access')}</p></div>
+  return children
+}
+
 export default function AdminLayout() {
   const { session, profile, loading, profileLoading, signOut, isAdmin } = useAuth()
   const { t, lang, toggle } = useLang()
@@ -53,12 +61,17 @@ export default function AdminLayout() {
     { to: '/admin/workers', icon: 'users', label: t('workers') },
     { to: '/admin/catalog', icon: 'flag', label: t('catalog') },
     { to: '/admin/submissions', icon: 'inbox', label: t('submissions') },
-    { to: '/admin/content', icon: 'edit', label: t('site_content') },
-    { to: '/admin/features', icon: 'star', label: t('home_lists') },
-    { to: '/admin/faq', icon: 'headset', label: t('faq_admin') },
-    { to: '/admin/forms', icon: 'list', label: t('forms') },
-    { to: '/admin/webhooks', icon: 'webhook', label: t('webhooks') },
-    ...(isAdmin ? [{ to: '/admin/users', icon: 'lock', label: t('users') }] : []),
+    // admin-only areas (agents cannot edit website content, forms, FAQ, integrations or users)
+    ...(isAdmin
+      ? [
+          { to: '/admin/content', icon: 'edit', label: t('site_content') },
+          { to: '/admin/features', icon: 'star', label: t('home_lists') },
+          { to: '/admin/faq', icon: 'headset', label: t('faq_admin') },
+          { to: '/admin/forms', icon: 'list', label: t('forms') },
+          { to: '/admin/webhooks', icon: 'webhook', label: t('webhooks') },
+          { to: '/admin/users', icon: 'lock', label: t('users') },
+        ]
+      : []),
     { to: '/admin/account', icon: 'settings', label: t('my_account') },
   ]
 

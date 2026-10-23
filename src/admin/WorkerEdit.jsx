@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
@@ -25,6 +25,7 @@ export default function WorkerEdit() {
   const [log, setLog] = useState([])
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
+  const original = useRef(null) // values as loaded, to log what changed on save
 
   const load = useCallback(async () => {
     const [p, c] = await Promise.all([
@@ -44,10 +45,12 @@ export default function WorkerEdit() {
         navigate('/admin/workers')
         return
       }
-      setW({ ...EMPTY, ...wr.data, age: wr.data.age ?? '', notes: wr.data.notes ?? '' })
+      const loaded = { ...EMPTY, ...wr.data, age: wr.data.age ?? '', notes: wr.data.notes ?? '' }
+      setW(loaded)
       const map = {}
       for (const r of wp.data || []) map[r.profession_id] = { checked: true, cv_url: r.cv_url || '' }
       setProfs(map)
+      original.current = { w: loaded, profs: map }
       setLog(lg.data || [])
     }
   }, [id, isNew, navigate, t])
@@ -101,6 +104,25 @@ export default function WorkerEdit() {
       .from('worker_professions')
       .upsert(selected.map(([pid, v]) => ({ worker_id: wid, profession_id: pid, cv_url: v.cv_url || null })), { onConflict: 'worker_id,profession_id' })
     if (up.error) return fail(up.error)
+
+    // activity log: list what changed (English field names, used in the export)
+    if (!isNew && original.current) {
+      const o = original.current
+      const changed = []
+      const fields = { worker_code: 'Worker ID', name: 'Name', age: 'Age', country_id: 'Country', photo_url: 'Photo', cv_url: 'Default CV', notes: 'Notes' }
+      for (const [k, label] of Object.entries(fields)) {
+        if (String(o.w[k] ?? '') !== String(w[k] ?? '')) changed.push(label)
+      }
+      const profName = (pid) => professions.find((p) => p.id === pid)?.name_en || pid
+      const before = Object.entries(o.profs).filter(([, v]) => v.checked)
+      const added = selected.filter(([pid]) => !o.profs[pid]?.checked).map(([pid]) => profName(pid))
+      const removed = before.filter(([pid]) => !profs[pid]?.checked).map(([pid]) => profName(pid))
+      const cvChanged = selected.filter(([pid, v]) => o.profs[pid]?.checked && (o.profs[pid].cv_url || '') !== (v.cv_url || '')).map(([pid]) => profName(pid))
+      if (added.length) changed.push(`Professions added: ${added.join(', ')}`)
+      if (removed.length) changed.push(`Professions removed: ${removed.join(', ')}`)
+      if (cvChanged.length) changed.push(`CV changed: ${cvChanged.join(', ')}`)
+      if (changed.length) await supabase.rpc('log_worker_update', { p_worker_id: wid, p_details: changed.join(' | ') })
+    }
 
     if (andPublish) await changeWorkerStatus(wid, 'publish', t)
     else toast(t('saved'))
@@ -222,6 +244,8 @@ export default function WorkerEdit() {
                 <span>{t('first_published_at')}</span><b>{fmtDate(w.first_published_at, lang)}</b>
                 {w.retired_at && <><span>{t('retired_at')}</span><b>{fmtDate(w.retired_at, lang)}</b></>}
                 <span>{t('publish_count')}</span><b>{w.publish_count}</b>
+                <span>{t('created_by')}</span><b>{w.created_by_name || '—'} · {fmtDate(w.created_at, lang)}</b>
+                <span>{t('updated_by')}</span><b>{w.updated_by_name || '—'} · {fmtDate(w.updated_at, lang)}</b>
               </div>
               {w.status === 'published' ? (
                 <button type="button" className="btn btn-warn btn-block" disabled={saving} onClick={() => statusAction('retire')}>{t('retire_from_site')}</button>
@@ -241,6 +265,7 @@ export default function WorkerEdit() {
                       <div>
                         <b>{t(`log_${l.action}`)}</b>
                         <div className="muted small">{fmtDate(l.at, lang)}{l.by_username ? ` · ${l.by_username}` : ''}</div>
+                        {l.details && <div className="small log-details" dir="ltr">{l.details}</div>}
                       </div>
                     </li>
                   ))}

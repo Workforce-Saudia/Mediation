@@ -37,6 +37,8 @@ Add `?lang=en` to any URL to open the site in English, for example in English-la
 1. Create a project at [supabase.com](https://supabase.com). Pick a region close to Saudi Arabia, such as Frankfurt or Mumbai.
 2. Open **SQL Editor**, then **New query**. Paste the whole of [`supabase/schema.sql`](supabase/schema.sql) and click **Run**.
    This creates the tables, security rules, the `media` storage bucket and starter data: 5 professions, 10 countries, the forms, the "Why us" cards and the FAQ.
+   Then run each update file **in order** the same way: [`supabase/migration-002.sql`](supabase/migration-002.sql).
+   > Always run `schema.sql` **followed by** every `migration-…sql`. Running `schema.sql` alone later would undo the update rules.
 3. **Authentication → Sign In / Providers**: turn **off** "Allow new users to sign up". Only admins should create accounts.
 4. Create the first Admin: **Authentication → Users → Add user → Create new user**
    - Email: `admin@staff.wfs.local` (the part before `@` is the username, here `admin`)
@@ -108,8 +110,16 @@ The **Users** page needs the Netlify function. To test it locally, use `npx netl
 ## How things work
 
 ### Roles
-- **Admin**: everything, plus the **Users** page (create users with a username and password, change any password, deactivate or reactivate accounts, change roles).
-- **Agent**: everything except the Users page. Anyone signed in can change their own password under **My account**.
+- **Admin**: everything, including Website content, Why us & steps, FAQ, Forms & fields, Webhooks and Users (create users with username, employee ID and password, reset passwords, deactivate or reactivate, change roles).
+- **Agent**: Workers (add, edit, publish, retire, export), Professions & countries, Form entries (status, notes, export) and My account. The database itself blocks agents from changing the admin-only areas.
+- Anyone signed in can change their own password under **My account**. Admins cannot view passwords, only reset them.
+
+### Activity tracking
+- **Form entries** record who last changed the status and who last edited the notes, with the time (shown in the table, the details window and the Excel export).
+- **Workers** record who created and last edited each profile, plus a full log: created, edited (with the list of changed fields), published, republished and retired, each with user and time. **Workers → Export Excel** downloads two sheets: full profiles and the activity log.
+
+### Extra forms
+Forms created in **Forms & fields** always get their own page (`/form/<slug>`) and can also appear as a header link, a footer link and/or a section on the home page at a chosen position. Extra forms can be deleted (their entries are deleted too; export them first). The core Contact and Booking forms cannot be deleted.
 - A deactivated user is blocked from logging in and loses database access immediately.
 
 ### Workers

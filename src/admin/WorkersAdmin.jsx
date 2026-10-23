@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { fetchAll, supabase } from '../lib/supabase'
 import { fmtDate, useLang } from '../lib/i18n'
 import { toast } from '../lib/toast'
 import Icon from '../components/Icon'
@@ -38,14 +38,16 @@ export default function WorkersAdmin() {
 
   const load = useCallback(async () => {
     const [w, p, c] = await Promise.all([
-      supabase
-        .from('workers')
-        .select('id,worker_code,name,age,status,published_at,photo_url,cv_url,country_id,publish_count,worker_professions(profession_id,cv_url)')
-        .order('created_at', { ascending: false }),
+      fetchAll(() =>
+        supabase
+          .from('workers')
+          .select('id,worker_code,name,age,status,published_at,photo_url,cv_url,country_id,publish_count,worker_professions(profession_id,cv_url)')
+          .order('created_at', { ascending: false }),
+      ).catch(() => []),
       supabase.from('professions').select('*').order('sort'),
       supabase.from('countries').select('*').order('sort'),
     ])
-    setRows(w.data || [])
+    setRows(w)
     setProfessions(p.data || [])
     setCountries(c.data || [])
   }, [])
@@ -69,6 +71,72 @@ export default function WorkersAdmin() {
     })
   }, [rows, status, country, prof, q])
 
+  // Excel: sheet 1 = full profiles (of the workers currently shown by the filters), sheet 2 = activity log
+  const [exporting, setExporting] = useState(false)
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      const ids = filtered.map((w) => w.id)
+      const idSet = new Set(ids)
+      const [allWorkers, allLogs, XLSX] = await Promise.all([
+        fetchAll(() => supabase.from('workers').select('*, worker_professions(profession_id,cv_url)').order('created_at')),
+        fetchAll(() => supabase.from('worker_status_log').select('*').order('at', { ascending: true })),
+        import('xlsx'),
+      ])
+      const full = { data: allWorkers.filter((w) => idSet.has(w.id)) }
+      const logs = { data: allLogs.filter((l) => idSet.has(l.worker_id)) }
+      const byWorker = {}
+      for (const l of logs.data || []) (byWorker[l.worker_id] = byWorker[l.worker_id] || []).push(l)
+      const lastBy = (wid, actions) => [...(byWorker[wid] || [])].reverse().find((l) => actions.includes(l.action))
+      const d = (v) => (v ? fmtDate(v, lang) : '')
+      const order = Object.fromEntries(ids.map((id, i) => [id, i]))
+      const workers = (full.data || []).sort((a, b) => order[a.id] - order[b.id])
+
+      const H = [
+        t('worker_id'), t('name'), t('age'), t('country'), t('professions'), t('status'),
+        t('published_at'), t('first_published_at'), t('retired_at'), t('publish_count'),
+        t('last_published_by'), t('last_retired_by'),
+        t('created_at'), t('created_by'), t('updated_at'), t('updated_by'),
+        t('photo'), t('default_cv'), t('cv_per_profession'), t('internal_notes'), t('activity_count'),
+      ]
+      const rowsOut = workers.map((w) => {
+        const co = countryById[w.country_id]
+        const wps = w.worker_professions || []
+        const pub = lastBy(w.id, ['published', 'republished'])
+        const ret = lastBy(w.id, ['retired'])
+        return [
+          w.worker_code, w.name, w.age ?? '', co ? pick(co, 'name') : '',
+          wps.map((x) => pick(profById[x.profession_id], 'name')).filter(Boolean).join(' / '),
+          t(`status_${w.status}`),
+          d(w.published_at), d(w.first_published_at), d(w.retired_at), w.publish_count,
+          pub ? `${pub.by_username || ''} — ${d(pub.at)}` : '',
+          ret ? `${ret.by_username || ''} — ${d(ret.at)}` : '',
+          d(w.created_at), w.created_by_name || '', d(w.updated_at), w.updated_by_name || '',
+          w.photo_url || '', w.cv_url || '',
+          wps.filter((x) => x.cv_url).map((x) => `${pick(profById[x.profession_id], 'name')}: ${x.cv_url}`).join('\n'),
+          w.notes || '', (byWorker[w.id] || []).length,
+        ]
+      })
+      const codeOf = Object.fromEntries(workers.map((w) => [w.id, [w.worker_code, w.name]]))
+      const H2 = [t('date'), t('worker_id'), t('name'), t('action'), t('details'), t('by_user')]
+      const logRows = (logs.data || []).map((l) => [d(l.at), codeOf[l.worker_id]?.[0] || '', codeOf[l.worker_id]?.[1] || '', t(`log_${l.action}`), l.details || '', l.by_username || ''])
+
+      const wb = XLSX.utils.book_new()
+      if (lang === 'ar') wb.Workbook = { Views: [{ RTL: true }] }
+      const s1 = XLSX.utils.aoa_to_sheet([H, ...rowsOut])
+      s1['!cols'] = H.map(() => ({ wch: 22 }))
+      const s2 = XLSX.utils.aoa_to_sheet([H2, ...logRows])
+      s2['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 60 }, { wch: 22 }]
+      XLSX.utils.book_append_sheet(wb, s1, lang === 'ar' ? 'العمالة' : 'Workers')
+      XLSX.utils.book_append_sheet(wb, s2, lang === 'ar' ? 'سجل النشاط' : 'Activity log')
+      XLSX.writeFile(wb, `workers-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } catch (e) {
+      toast(e.message, 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const act = async (w, action) => {
     if (action === 'publish' && (!w.photo_url || !(w.cv_url || (w.worker_professions || []).some((x) => x.cv_url)))) {
       if (!window.confirm(t('publish_missing_files'))) return
@@ -82,6 +150,9 @@ export default function WorkersAdmin() {
   return (
     <>
       <PageHeader title={t('workers')} sub={t('workers_admin_sub')}>
+        <button type="button" className="btn btn-outline" disabled={exporting || !filtered.length} onClick={exportExcel} title={t('export_workers_hint')}>
+          <Icon name="download" size={18} />{exporting ? t('please_wait') : t('export_excel')}
+        </button>
         <Link to="/admin/workers/new" className="btn btn-primary"><Icon name="plus" size={18} />{t('add_worker')}</Link>
       </PageHeader>
 

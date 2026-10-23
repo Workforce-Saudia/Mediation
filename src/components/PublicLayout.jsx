@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useLang } from '../lib/i18n'
 import { useContent } from '../lib/content'
 import { captureUtm, injectGtm } from '../lib/analytics'
-import { isConfigured } from '../lib/supabase'
+import { isConfigured, supabase } from '../lib/supabase'
 import Icon from './Icon'
 import LogoMark from './LogoMark'
 import { SmartLink, Spinner } from './common'
@@ -26,8 +26,24 @@ function ScrollManager() {
   return null
 }
 
-function Header() {
-  const { t, lang, toggle } = useLang()
+/** Extra forms (created in the dashboard) with their website placement */
+function usePlacedForms() {
+  const [forms, setForms] = useState([])
+  useEffect(() => {
+    if (!supabase) return
+    supabase
+      .from('forms')
+      .select('slug,name_ar,name_en,description_ar,description_en,show_in_header,show_in_footer,home_position,system')
+      .eq('active', true)
+      .eq('system', false)
+      .order('created_at')
+      .then(({ data, error }) => !error && setForms(data || []))
+  }, [])
+  return forms
+}
+
+function Header({ forms }) {
+  const { t, lang, toggle, pick } = useLang()
   const { c } = useContent()
   const [open, setOpen] = useState(false)
   const loc = useLocation()
@@ -38,6 +54,7 @@ function Header() {
     ['/', t('nav_home')],
     ['/workers', t('nav_workers')],
     ['/faq', t('nav_faq')],
+    ...forms.filter((f) => f.show_in_header).map((f) => [`/form/${f.slug}`, pick(f, 'name')]),
     ['/#contact', t('nav_contact')],
   ]
   const isActive = (to) => (to === '/' ? loc.pathname === '/' && !loc.hash : !to.includes('#') && loc.pathname.startsWith(to))
@@ -80,8 +97,8 @@ function Header() {
   )
 }
 
-function Footer() {
-  const { t } = useLang()
+function Footer({ forms }) {
+  const { t, pick } = useLang()
   const { c } = useContent()
   const phone = c('phone')
   const email = c('email')
@@ -116,6 +133,9 @@ function Footer() {
             <li><Link to="/workers">{t('nav_workers')}</Link></li>
             <li><Link to="/faq">{t('nav_faq')}</Link></li>
             <li><Link to="/contact">{t('nav_contact')}</Link></li>
+            {forms.filter((f) => f.show_in_footer).map((f) => (
+              <li key={f.slug}><Link to={`/form/${f.slug}`}>{pick(f, 'name')}</Link></li>
+            ))}
             <li><Link to="/terms">{c('terms_title')}</Link></li>
           </ul>
         </div>
@@ -145,6 +165,7 @@ function Footer() {
 export default function PublicLayout() {
   const { c, loaded } = useContent()
   const { lang } = useLang()
+  const forms = usePlacedForms()
 
   useEffect(() => {
     captureUtm()
@@ -166,11 +187,11 @@ export default function PublicLayout() {
     <div className="site">
       {!isConfigured && <div className="preview-bar">Preview mode — connect Supabase (see README) to enable workers, forms and the dashboard.</div>}
       <ScrollManager />
-      <Header />
+      <Header forms={forms} />
       <main className="site-main">
-        <Outlet />
+        <Outlet context={{ forms }} />
       </main>
-      <Footer />
+      <Footer forms={forms} />
     </div>
   )
 }
