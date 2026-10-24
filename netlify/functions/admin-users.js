@@ -24,6 +24,12 @@ export default async (req) => {
   if (userErr || !userData?.user) return json(401, { error: 'unauthorized' })
   const { data: me } = await admin.from('profiles').select('*').eq('id', userData.user.id).maybeSingle()
   if (!me || !me.active || me.role !== 'admin') return json(403, { error: 'forbidden' })
+  // admin actions require two-step login (token must be "aal2"; the token was verified by getUser above)
+  let aal = 'aal1'
+  try {
+    aal = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).aal || 'aal1'
+  } catch { /* malformed */ }
+  if (aal !== 'aal2') return json(403, { error: 'mfa_required' })
 
   let body
   try {
@@ -41,7 +47,11 @@ export default async (req) => {
         const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
         const byId = Object.fromEntries((list?.users || []).map((u) => [u.id, u]))
         return json(200, {
-          users: profiles.map((p) => ({ ...p, last_sign_in_at: byId[p.id]?.last_sign_in_at || null })),
+          users: profiles.map((p) => ({
+            ...p,
+            last_sign_in_at: byId[p.id]?.last_sign_in_at || null,
+            mfa: (byId[p.id]?.factors || []).some((f) => f.status === 'verified'),
+          })),
         })
       }
 
@@ -102,6 +112,18 @@ export default async (req) => {
         if (error) throw error
         const { error: pErr } = await admin.from('profiles').update({ active }).eq('id', body.id)
         if (pErr) throw pErr
+        return json(200, { ok: true })
+      }
+
+      case 'reset_mfa': {
+        // e.g. the user lost their phone: remove their authenticator so they can set up a new one at next login
+        if (body.id === me.id) return json(400, { error: 'cannot_reset_own_mfa' })
+        const { data: list, error } = await admin.auth.admin.mfa.listFactors({ userId: body.id })
+        if (error) throw error
+        for (const f of list?.factors || []) {
+          const { error: dErr } = await admin.auth.admin.mfa.deleteFactor({ id: f.id, userId: body.id })
+          if (dErr) throw dErr
+        }
         return json(200, { ok: true })
       }
 

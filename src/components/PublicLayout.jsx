@@ -137,6 +137,7 @@ function Footer({ forms }) {
               <li key={f.slug}><Link to={`/form/${f.slug}`}>{pick(f, 'name')}</Link></li>
             ))}
             <li><Link to="/terms">{c('terms_title')}</Link></li>
+            <li><Link to="/privacy">{c('privacy_title')}</Link></li>
           </ul>
         </div>
         <div>
@@ -156,7 +157,10 @@ function Footer({ forms }) {
       </div>
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} {c('site_name')} — {t('rights')}</span>
-        <Link to="/terms">{c('terms_title')}</Link>
+        <span className="footer-legal">
+          <Link to="/terms">{c('terms_title')}</Link>
+          <Link to="/privacy">{c('privacy_title')}</Link>
+        </span>
       </div>
     </footer>
   )

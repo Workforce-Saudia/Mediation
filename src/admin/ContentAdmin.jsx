@@ -99,7 +99,7 @@ export default function ContentAdmin() {
                     <Uploader
                       value={v.value_ar}
                       onChange={(url) => setKey(d.key, { value_ar: url })}
-                      accept={['png', 'jpg', 'jpeg', 'webp', 'svg']}
+                      accept={['png', 'jpg', 'jpeg', 'webp']}
                       folder="site"
                       transform={d.key.startsWith('logo') ? trimLogo : undefined}
                     />

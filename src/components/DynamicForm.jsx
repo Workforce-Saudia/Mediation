@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useContent } from '../lib/content'
+import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../lib/i18n'
@@ -97,16 +99,20 @@ function Field({ f, value, onChange, readOnly, error }) {
  */
 export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra = {}, workerId = null, onSuccess }) {
   const { t, pick, lang } = useLang()
+  const { c } = useContent()
   const navigate = useNavigate()
   const [form, setForm] = useState(null)
   const [fields, setFields] = useState([])
   const [loading, setLoading] = useState(Boolean(supabase))
   const [values, setValues] = useState(prefill)
   const [agree, setAgree] = useState(false)
+  const [agreePrivacy, setAgreePrivacy] = useState(false)
   const [errors, setErrors] = useState({})
   const [sending, setSending] = useState(false)
   const [failMsg, setFailMsg] = useState('')
   const [honey, setHoney] = useState('')
+  const [token, setToken] = useState('')
+  const turnstile = useRef(null)
 
   useEffect(() => {
     if (!supabase) return
@@ -160,6 +166,7 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
       }
     }
     if (form.require_terms && !agree) errs._terms = t('err_terms')
+    if (form.require_privacy && !agreePrivacy) errs._privacy = t('err_privacy')
     return errs
   }
 
@@ -170,12 +177,17 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
     setErrors(errs)
     if (Object.keys(errs).some((k) => errs[k])) {
       const first = Object.keys(errs)[0]
-      document.getElementById(first === '_terms' ? `terms-${slug}` : `f-${slug}-${first}`)?.focus()
+      const focusId = first === '_terms' ? `terms-${slug}` : first === '_privacy' ? `privacy-${slug}` : `f-${slug}-${first}`
+      document.getElementById(focusId)?.focus()
       return
     }
     if (honey) {
       // bot filled the hidden field → pretend success
       navigate(`/thank-you?form=${slug}`)
+      return
+    }
+    if (TURNSTILE_SITE_KEY && !token) {
+      setFailMsg(t('err_captcha_wait'))
       return
     }
     setSending(true)
@@ -185,18 +197,43 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
       data[f.name] = typeof v === 'string' ? v.trim() : v ?? ''
     }
     if (form.require_terms) data.terms_accepted = true
+    if (form.require_privacy) data.privacy_accepted = true
     Object.assign(data, extra)
-    const { error } = await supabase.from('submissions').insert({
-      form_slug: slug,
-      data,
-      worker_id: workerId,
-      lang,
-      page_url: window.location.href.slice(0, 500),
-      utm: getUtm(),
-    })
+    // sent through the server function (bot check, validation, rate limit) – never straight to the database
+    let res
+    let out = {}
+    try {
+      res = await fetch('/.netlify/functions/submit-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          form_slug: slug,
+          data,
+          worker_id: workerId,
+          lang,
+          page_url: window.location.href.slice(0, 500),
+          utm: getUtm(),
+          token,
+        }),
+      })
+      out = await res.json().catch(() => ({}))
+    } catch {
+      res = null
+    }
     setSending(false)
-    if (error) {
-      setFailMsg(t('err_submit'))
+    if (!res || !res.ok) {
+      turnstile.current?.reset()
+      if (out.error === 'invalid' && out.fields) {
+        const map = {}
+        for (const [k, v] of Object.entries(out.fields)) {
+          const f = fields.find((x) => x.name === k)
+          map[k] = k === '_terms' ? t('err_terms') : k === '_privacy' ? t('err_privacy') : v === 'required' ? t('err_required') : (f && pick(f, 'error')) || t('err_format')
+        }
+        setErrors(map)
+      }
+      setFailMsg(
+        out.error === 'too_many' ? t('err_too_many') : out.error === 'captcha_failed' ? t('err_captcha') : out.error === 'invalid' ? t('fix_errors') : t('err_submit'),
+      )
       return
     }
     track('form_submit', { form: slug })
@@ -225,8 +262,26 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
           {errors._terms && <div className="field-error">{errors._terms}</div>}
         </div>
       )}
+      {form.require_privacy && (
+        <div className="field field-wide">
+          <label className="check">
+            <input id={`privacy-${slug}`} type="checkbox" checked={agreePrivacy} onChange={(e) => { setAgreePrivacy(e.target.checked); setErrors((x) => ({ ...x, _privacy: undefined })) }} />
+            <span>
+              {t('privacy_agree_prefix')}{' '}
+              <Link to="/privacy" target="_blank" rel="noopener">{c('privacy_title')}</Link>
+              <span className="req">*</span>
+            </span>
+          </label>
+          {errors._privacy && <div className="field-error">{errors._privacy}</div>}
+        </div>
+      )}
+      <Turnstile ref={turnstile} lang={lang} onToken={setToken} />
       {failMsg && <div className="notice notice-error">{failMsg}</div>}
-      <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={sending || (form.require_terms && !agree)}>
+      <button
+        type="submit"
+        className="btn btn-primary btn-lg btn-block"
+        disabled={sending || (form.require_terms && !agree) || (form.require_privacy && !agreePrivacy)}
+      >
         {sending ? t('sending') : pick(form, 'submit') || t('submit')}
       </button>
     </form>

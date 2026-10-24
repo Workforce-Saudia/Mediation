@@ -10,7 +10,7 @@ import Home from './pages/Home'
 import Workers from './pages/Workers'
 import Book from './pages/Book'
 import Faq from './pages/Faq'
-import { Contact, FormPage, NotFound, Terms, ThankYou } from './pages/SimplePages'
+import { Contact, FormPage, NotFound, Privacy, Terms, ThankYou } from './pages/SimplePages'
 
 // Dashboard is loaded only when needed, so the public pages stay fast for ad traffic
 const AdminLayout = lazy(() => import('./admin/AdminLayout'))
@@ -45,6 +45,7 @@ export default function App() {
                 <Route path="book/:code" element={<Book />} />
                 <Route path="faq" element={<Faq />} />
                 <Route path="terms" element={<Terms />} />
+                <Route path="privacy" element={<Privacy />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="form/:slug" element={<FormPage />} />
                 <Route path="thank-you" element={<ThankYou />} />

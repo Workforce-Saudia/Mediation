@@ -14,6 +14,7 @@ const EXTRA_LABELS = {
   worker_country: ['جنسية العامل', 'Worker nationality'],
   profession: ['المهنة', 'Profession'],
   terms_accepted: ['الموافقة على الشروط', 'Terms accepted'],
+  privacy_accepted: ['الموافقة على سياسة الخصوصية', 'Privacy policy accepted'],
 }
 
 export default function SubmissionsAdmin() {

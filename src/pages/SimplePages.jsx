@@ -24,6 +24,24 @@ export function Terms() {
   )
 }
 
+export function Privacy() {
+  const { c } = useContent()
+  usePageTitle(`${c('privacy_title')} | ${c('site_name')}`)
+  return (
+    <div>
+      <section className="page-hero">
+        <div className="container narrow">
+          <h1>{c('privacy_title')}</h1>
+          {c('privacy_updated') && <p className="page-hero-text">{c('privacy_updated')}</p>}
+        </div>
+      </section>
+      <div className="container narrow">
+        <div className="card prose-card"><Markdown text={c('privacy_body')} /></div>
+      </div>
+    </div>
+  )
+}
+
 export function Contact() {
   const { c } = useContent()
   usePageTitle(`${c('contact_title')} | ${c('site_name')}`)

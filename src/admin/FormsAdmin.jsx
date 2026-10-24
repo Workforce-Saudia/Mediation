@@ -135,6 +135,7 @@ export default function FormsAdmin() {
       slug: s,
       name_ar: newForm.name_ar,
       name_en: newForm.name_en,
+      require_privacy: true,
       show_in_header: newForm.show_in_header,
       show_in_footer: newForm.show_in_footer,
       home_position: newForm.home_position,
@@ -172,6 +173,7 @@ export default function FormsAdmin() {
             <BiField label={t('submit_text')} obj={form} base="submit" set={(p) => setForm((s) => ({ ...s, ...p }))} />
             <div className="row-gap">
               <Toggle checked={form.require_terms} onChange={(v) => setForm((s) => ({ ...s, require_terms: v }))} label={t('require_terms')} />
+              <Toggle checked={!!form.require_privacy} onChange={(v) => setForm((s) => ({ ...s, require_privacy: v }))} label={t('require_privacy')} />
               <Toggle checked={form.active} onChange={(v) => setForm((s) => ({ ...s, active: v }))} label={t('form_active')} />
             </div>
             {form.system ? (

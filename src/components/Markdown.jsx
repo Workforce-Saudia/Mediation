@@ -69,6 +69,10 @@ export default function Markdown({ text = '', className = '' }) {
       flushPara()
       flushList()
       out.push(createElement(`h${m[1].length + 1}`, { key: out.length }, inline(m[2], out.length)))
+    } else if ((m = line.match(/^>\s?(.*)$/))) {
+      flushPara()
+      flushList()
+      out.push(<blockquote key={out.length}>{inline(m[1], out.length)}</blockquote>)
     } else if ((m = line.match(/^[-*•]\s+(.*)$/))) {
       flushPara()
       if (!list || list.type !== 'ul') {

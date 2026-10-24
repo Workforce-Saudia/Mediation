@@ -14,6 +14,8 @@ const ERR_KEYS = {
   cannot_deactivate_self: 'err_self',
   cannot_change_own_role: 'err_self',
   forbidden: 'no_access',
+  mfa_required: 'mfa_required_admin',
+  cannot_reset_own_mfa: 'err_self',
   server_not_configured: 'err_server_config',
 }
 
@@ -114,7 +116,7 @@ export default function UsersAdmin() {
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th>{t('employee_id')}</th><th>{t('username')}</th><th>{t('full_name')}</th><th>{t('role')}</th><th>{t('status')}</th><th>{t('last_login')}</th><th /></tr>
+              <tr><th>{t('employee_id')}</th><th>{t('username')}</th><th>{t('full_name')}</th><th>{t('role')}</th><th>{t('status')}</th><th>{t('mfa_short')}</th><th>{t('last_login')}</th><th /></tr>
             </thead>
             <tbody>
               {users.map((u) => {
@@ -131,6 +133,14 @@ export default function UsersAdmin() {
                       </select>
                     </td>
                     <td><span className={`badge ${u.active ? 'badge-published' : 'badge-retired'}`}>{u.active ? t('active') : t('inactive')}</span></td>
+                    <td className="nowrap">
+                      <span className={`badge ${u.mfa ? 'badge-published' : 'badge-draft'}`}>{u.mfa ? t('mfa_on') : t('mfa_off')}</span>
+                      {u.mfa && !self && (
+                        <button type="button" className="btn btn-sm btn-ghost" disabled={busy} title={t('mfa_reset_hint')} onClick={() => window.confirm(t('mfa_reset_confirm')) && run({ action: 'reset_mfa', id: u.id })}>
+                          {t('mfa_reset')}
+                        </button>
+                      )}
+                    </td>
                     <td className="small nowrap">{fmtDate(u.last_sign_in_at, lang)}</td>
                     <td className="nowrap actions">
                       <button type="button" className="btn btn-sm btn-ghost" disabled={busy} title={t('edit')} onClick={() => setEdit({ id: u.id, username: u.username, full_name: u.full_name || '', employee_id: u.employee_id || '' })}><Icon name="edit" size={14} /></button>

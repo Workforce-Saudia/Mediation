@@ -37,7 +37,7 @@ Add `?lang=en` to any URL to open the site in English, for example in English-la
 1. Create a project at [supabase.com](https://supabase.com). Pick a region close to Saudi Arabia, such as Frankfurt or Mumbai.
 2. Open **SQL Editor**, then **New query**. Paste the whole of [`supabase/schema.sql`](supabase/schema.sql) and click **Run**.
    This creates the tables, security rules, the `media` storage bucket and starter data: 5 professions, 10 countries, the forms, the "Why us" cards and the FAQ.
-   Then run each update file **in order** the same way: [`supabase/migration-002.sql`](supabase/migration-002.sql).
+   Then run each update file **in order** the same way: [`supabase/migration-002.sql`](supabase/migration-002.sql), then [`supabase/migration-003.sql`](supabase/migration-003.sql).
    > Always run `schema.sql` **followed by** every `migration-…sql`. Running `schema.sql` alone later would undo the update rules.
 3. **Authentication → Sign In / Providers**: turn **off** "Allow new users to sign up". Only admins should create accounts.
 4. Create the first Admin: **Authentication → Users → Add user → Create new user**
@@ -61,6 +61,8 @@ Add `?lang=en` to any URL to open the site in English, for example in English-la
    | `VITE_SUPABASE_ANON_KEY` | anon / publishable key |
    | `SUPABASE_URL` | Project URL |
    | `SUPABASE_SERVICE_ROLE_KEY` | service_role / secret key (server only, never shared) |
+   | `VITE_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key (public) |
+   | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret key (server only) |
 
 4. Click **Deploy**. After it finishes, connect your domain under **Domain management**.
 
@@ -113,6 +115,14 @@ The **Users** page needs the Netlify function. To test it locally, use `npx netl
 - **Admin**: everything, including Website content, Why us & steps, FAQ, Forms & fields, Webhooks and Users (create users with username, employee ID and password, reset passwords, deactivate or reactivate, change roles).
 - **Agent**: Workers (add, edit, publish, retire, export), Professions & countries, Form entries (status, notes, export) and My account. The database itself blocks agents from changing the admin-only areas.
 - Anyone signed in can change their own password under **My account**. Admins cannot view passwords, only reset them.
+
+### Security
+- **Form entries** go only through the `submit-form` Netlify function: Cloudflare Turnstile bot check, server-side validation, max 8 entries per visitor IP per hour, duplicate (double-click) protection. Browsers cannot write to the database directly.
+- **Two-step login (TOTP)** is mandatory for Admins and optional for Agents (My account). Lost phone → another Admin uses **Users → Reset** (or Supabase → Authentication → Users → the user → delete the MFA factor).
+- **Automatic logout** after 30 minutes without activity.
+- **Uploads**: images 5 MB, PDF 15 MB, video 50 MB; only PNG/JPG/WebP/PDF/MP4/WebM.
+- **Security headers** (CSP, HSTS, anti-framing) in `netlify.toml`. If a new marketing tag added in GTM is blocked, add its domain to the Content-Security-Policy there.
+- **Privacy policy (PDPL)** page at `/privacy`, editable under Website content; forms can require consent to it.
 
 ### Activity tracking
 - **Form entries** record who last changed the status and who last edited the notes, with the time (shown in the table, the details window and the Excel export).

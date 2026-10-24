@@ -7,6 +7,8 @@ import { isConfigured } from '../lib/supabase'
 import Icon from '../components/Icon'
 import LogoMark from '../components/LogoMark'
 import { Spinner } from '../components/common'
+import { toast } from '../lib/toast'
+import { MfaChallenge, MfaEnroll, useMfaStatus } from './Mfa'
 
 export function SetupNotice() {
   return (
@@ -25,6 +27,62 @@ export function AdminOnly({ children }) {
   const { isAdmin } = useAuth()
   const { t } = useLang()
   if (!isAdmin) return <div className="a-empty"><Icon name="lock" size={28} /><p>{t('no_access')}</p></div>
+  return children
+}
+
+const IDLE_MINUTES = 30
+
+/** Logs the user out after 30 minutes without any activity (shared across open tabs) */
+function IdleLogout({ signOut }) {
+  const { t } = useLang()
+  useEffect(() => {
+    const KEY = 'wfs_last_activity'
+    const mark = () => {
+      try { localStorage.setItem(KEY, String(Date.now())) } catch { /* ignore */ }
+    }
+    mark()
+    let last = 0
+    const onActivity = () => {
+      const now = Date.now()
+      if (now - last > 15000) { last = now; mark() } // throttle
+    }
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true }))
+    const timer = setInterval(() => {
+      let ts = Date.now()
+      try { ts = Number(localStorage.getItem(KEY)) || Date.now() } catch { /* ignore */ }
+      if (Date.now() - ts > IDLE_MINUTES * 60_000) {
+        toast(t('idle_logged_out'), 'error')
+        signOut()
+      }
+    }, 30_000)
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, onActivity))
+      clearInterval(timer)
+    }
+  }, [signOut, t])
+  return null
+}
+
+/** Two-step login gate: asks for the authenticator code, and forces Admins to set one up */
+function MfaGate({ profile, signOut, children }) {
+  const mfa = useMfaStatus()
+  if (mfa.loading) return <Spinner full />
+  const needChallenge = mfa.nextLevel === 'aal2' && mfa.currentLevel !== 'aal2' && mfa.factors.length > 0
+  const needEnroll = profile.role === 'admin' && mfa.factors.length === 0
+  if (needChallenge || needEnroll) {
+    return (
+      <div className="center-screen">
+        <div className="card narrow-card">
+          {needChallenge ? (
+            <MfaChallenge factors={mfa.factors} onDone={mfa.refresh} onCancel={signOut} />
+          ) : (
+            <MfaEnroll mandatory onDone={mfa.refresh} onCancel={signOut} />
+          )}
+        </div>
+      </div>
+    )
+  }
   return children
 }
 
@@ -76,6 +134,8 @@ export default function AdminLayout() {
   ]
 
   return (
+    <MfaGate profile={profile} signOut={signOut}>
+    <IdleLogout signOut={signOut} />
     <div className="admin">
       <aside className={`a-side ${open ? 'open' : ''}`}>
         <div className="a-brand">
@@ -129,5 +189,6 @@ export default function AdminLayout() {
         </div>
       </div>
     </div>
+    </MfaGate>
   )
 }

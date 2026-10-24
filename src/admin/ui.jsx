@@ -92,6 +92,12 @@ export function Uploader({ value, onChange, accept = ['png', 'jpg', 'jpeg'], fol
         err.code = 'invalid_type'
         throw err
       }
+      // size limits: images 5 MB, PDFs 15 MB, videos 50 MB
+      const maxMB = ['mp4', 'webm'].includes(ext) ? 50 : ext === 'pdf' ? 15 : 5
+      if (f.size > maxMB * 1024 * 1024) {
+        toast(t('file_too_large', { mb: maxMB }), 'error')
+        return
+      }
       const file = transform ? await transform(f) : f
       const url = await uploadFile(file, folder)
       onChange(url)
