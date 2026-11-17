@@ -369,7 +369,7 @@ export const STRINGS = {
   privacy_agree_prefix: ['اطلعت على', 'I have read and agree to the'],
   err_privacy: ['يجب الموافقة على سياسة الخصوصية', 'You must accept the privacy policy'],
   require_privacy: ['يتطلب الموافقة على سياسة الخصوصية (PDPL)', 'Requires accepting the Privacy policy (PDPL)'],
-  err_captcha_wait: ['جاري التحقق الأمني، يرجى المحاولة بعد ثانية.', 'Security check in progress, please try again in a second.'],
+  verifying: ['جاري التحقق…', 'Verifying…'],
   err_captcha: ['تعذر التحقق الأمني، يرجى المحاولة مرة أخرى.', 'Security check failed, please try again.'],
   err_too_many: ['تم إرسال عدد كبير من الطلبات. يرجى المحاولة لاحقاً أو التواصل عبر واتساب.', 'Too many requests. Please try again later or contact us on WhatsApp.'],
   file_too_large: ['حجم الملف أكبر من المسموح ({mb} ميجابايت)', 'File is larger than the limit ({mb} MB)'],

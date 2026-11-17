@@ -51,11 +51,10 @@ export default async (req, context) => {
 
   const ip = context?.ip || req.headers.get('x-nf-client-connection-ip') || ''
 
-  // 1) bot check
+  // 1) bot check — a failure does NOT reject the entry (a real customer on a slow network or with an
+  //    ad-blocker must never be lost): it is saved with status "spam" for staff to review, and no webhooks fire.
   const turnstileSecret = process.env.TURNSTILE_SECRET_KEY
-  if (turnstileSecret && !(await verifyTurnstile(turnstileSecret, body.token, ip))) {
-    return json(403, { error: 'captcha_failed' })
-  }
+  const captchaFailed = Boolean(turnstileSecret) && !(await verifyTurnstile(turnstileSecret, body.token, ip))
 
   const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   const slug = String(body.form_slug || '')
@@ -131,6 +130,7 @@ export default async (req, context) => {
     page_url: String(body.page_url || '').slice(0, 500),
     utm,
     ip_hash: ipHash,
+    ...(captchaFailed ? { status: 'spam', notes: 'Security check (Cloudflare Turnstile) did not pass — please review. / لم يجتز التحقق الأمني — يرجى المراجعة.' } : {}),
   })
   if (error) return json(500, { error: 'save_failed' })
   return json(200, { ok: true })

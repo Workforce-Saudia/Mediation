@@ -26,13 +26,50 @@ function loadScript() {
 const Turnstile = forwardRef(function Turnstile({ lang, onToken }, ref) {
   const box = useRef(null)
   const widget = useRef(null)
+  const token = useRef('')
+  const failed = useRef(false) // script blocked or widget error: stop waiting, let the server decide
+  const waiters = useRef([])
   const cb = useRef(onToken)
   cb.current = onToken
 
+  const setToken = (t) => {
+    token.current = t
+    cb.current(t)
+    if (t) {
+      failed.current = false
+      waiters.current.splice(0).forEach((resolve) => resolve(t))
+    }
+  }
+  const fail = () => {
+    failed.current = true
+    token.current = ''
+    cb.current('')
+    waiters.current.splice(0).forEach((resolve) => resolve(''))
+  }
+
   useImperativeHandle(ref, () => ({
+    /** Fresh token for the next submit (tokens are single-use) */
     reset() {
-      if (widget.current != null && window.turnstile) window.turnstile.reset(widget.current)
+      token.current = ''
       cb.current('')
+      if (widget.current != null && window.turnstile) window.turnstile.reset(widget.current)
+    },
+    /** Resolves with a token as soon as the check finishes, or '' on failure / timeout */
+    waitForToken(timeoutMs = 12000) {
+      if (!TURNSTILE_SITE_KEY) return Promise.resolve('')
+      if (token.current) return Promise.resolve(token.current)
+      try {
+        const t = widget.current != null && window.turnstile?.getResponse(widget.current)
+        if (t) return Promise.resolve(t)
+      } catch { /* ignore */ }
+      if (failed.current) return Promise.resolve('')
+      return new Promise((resolve) => {
+        waiters.current.push(resolve)
+        setTimeout(() => {
+          waiters.current = waiters.current.filter((w) => w !== resolve)
+          resolve(token.current || '')
+        }, timeoutMs)
+      })
     },
   }))
 
@@ -47,17 +84,25 @@ const Turnstile = forwardRef(function Turnstile({ lang, onToken }, ref) {
           language: lang === 'ar' ? 'ar' : 'en',
           theme: 'light',
           appearance: 'interaction-only', // invisible unless Cloudflare needs a click
-          callback: (token) => cb.current(token),
-          'expired-callback': () => cb.current(''),
-          'error-callback': () => cb.current(''),
+          'refresh-expired': 'auto', // tokens expire after 5 minutes: renew silently
+          callback: (t) => setToken(t),
+          'expired-callback': () => {
+            token.current = ''
+            cb.current('')
+          },
+          'error-callback': () => {
+            fail()
+            return true // handled: Cloudflare keeps retrying in the background
+          },
         })
       })
-      .catch(() => cb.current(''))
+      .catch(() => fail())
     return () => {
       cancelled = true
       if (widget.current != null && window.turnstile) window.turnstile.remove(widget.current)
       widget.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang])
 
   if (!TURNSTILE_SITE_KEY) return null

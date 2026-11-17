@@ -109,6 +109,7 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
   const [agreePrivacy, setAgreePrivacy] = useState(false)
   const [errors, setErrors] = useState({})
   const [sending, setSending] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const [failMsg, setFailMsg] = useState('')
   const [honey, setHoney] = useState('')
   const [token, setToken] = useState('')
@@ -186,11 +187,15 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
       navigate(`/thank-you?form=${slug}`)
       return
     }
-    if (TURNSTILE_SITE_KEY && !token) {
-      setFailMsg(t('err_captcha_wait'))
-      return
-    }
     setSending(true)
+    // wait for the background security check instead of refusing the click;
+    // if it can't finish (blocked script, slow network) the server still saves the entry, flagged for review
+    let captcha = token
+    if (TURNSTILE_SITE_KEY && !captcha) {
+      setVerifying(true)
+      captcha = (await turnstile.current?.waitForToken(12000)) || ''
+      setVerifying(false)
+    }
     const data = {}
     for (const f of fields) {
       const v = values[f.name]
@@ -213,7 +218,7 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
           lang,
           page_url: window.location.href.slice(0, 500),
           utm: getUtm(),
-          token,
+          token: captcha,
         }),
       })
       out = await res.json().catch(() => ({}))
@@ -282,7 +287,7 @@ export default function DynamicForm({ slug, prefill = {}, readOnly = [], extra =
         className="btn btn-primary btn-lg btn-block"
         disabled={sending || (form.require_terms && !agree) || (form.require_privacy && !agreePrivacy)}
       >
-        {sending ? t('sending') : pick(form, 'submit') || t('submit')}
+        {verifying ? t('verifying') : sending ? t('sending') : pick(form, 'submit') || t('submit')}
       </button>
     </form>
   )
